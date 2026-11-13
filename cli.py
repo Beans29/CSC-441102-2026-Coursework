@@ -14,23 +14,35 @@ def print_table(plants: list[core.Plant]) -> None:
     
     if not plants:
         print("No plants found. Type 'add' to add a new plant.")
+        
     for plant in plants:
         print(f"{plant.id:<5} {plant.name:<20} {plant.plant_type:<15} {plant.location:<15} {plant.interval_days:<15} Days")
+        
     print()
     
 
+def ask (prompt: str, parser):
+    """Ask a question and parse the answer. Repeat until the answer is valid."""
+    while True:
+        try:
+            return parser(input(prompt))
+        except core.ValidationError as e:
+            print(f"Invalid input for {e.field}: {e.message}")
+            
+
+
 def add_screen(conn) -> None:
     """Ask for the details of a new plant and add it to the database"""
-    name = input("Name: ")
-    plant_type = input("Type: ")
-    location = input("Location: ")
-    try:
-        interval_days = int(input("Water every how many days?"))
-    except ValueError:
-        print("Invalid input. Please enter a number.")
-        return
+    
+    name = ask("Name: ", core.parse_name)
+    plant_type = ask("Type: ", core.parse_type)
+    location = ask("Location: ", core.parse_location)
+    interval_days = ask("Water every how many days? ", core.parse_interval_days)
     plant = core.add_plant(conn, name, plant_type, location, interval_days)
     print(f"Added {plant.name}.")
+    
+    
+    
 
 def main() -> None:
     """Show the table, read a comment, repeat until the user types 'Quit'."""
@@ -43,7 +55,7 @@ def main() -> None:
         elif command == "quit":
             break
         else:
-            print("Type Add or Quit.")
+            print("Type Add or Quit.")    
     conn.close()
     
     
