@@ -4,12 +4,13 @@ Author: X9J77
 """
 
 from datetime import date
+
 import core
 
 def print_table(plants: list[core.Plant], today: date) -> None:
     """Print the plants in table format"""
     heading = (f"{'ID':<4}  {'Name':<20}  {'Age':<9}  {'Type':<12}  "
-               f"{'Location':<12}  {'Water every'}")    
+               f"{'Location':<12}  {'Next Water'}")    
     print()
     print(heading)
     print("-" * len(heading))
@@ -17,9 +18,18 @@ def print_table(plants: list[core.Plant], today: date) -> None:
         print("No plants yet, Type add to add a new plant.")
     for plant in plants:
         age = core.format_age(*core.age_of(plant.acquired, today)) 
-        
-        print(f"{plant.id:<4} {plant.name:<20} {plant.plant_type:<20} {age:<9} {plant.location:<20} {plant.interval_days:<15} Days")
+        print(f"{core.format_id(plant.id):<4} {plant.name:<20} {age:<9}  "
+              f"{plant.plant_type:<12} {plant.location:<12}  "
+              f"{core.format_next_water(plant, today)}")
     print()
+    
+def parse_command(line: str) -> tuple[str, str]:
+    """Split what the user typed into a command word and the rest. 
+    E.g "water 1" gives ("water", "1")."""
+    parts = line.strip().split(None, 1)
+    word = parts[0].lower() if parts else ""
+    rest = parts[1] if len(parts) > 1 else ""
+    return word, rest
     
 
 def ask (prompt: str, parser):
@@ -44,18 +54,34 @@ def add_screen(conn) -> None:
     plant = core.add_plant(conn, name, plant_type, location, interval_days, acquired)
     print(f"Added {plant.name}.")
     
+def water_command(conn, rest: str) -> str:
+    """Handle water <ID> [date]. 
+    No date means today"""
+    id_text, _, date_text = rest.strip().partition(" ")
+    plant = core.get_plant(conn, core.parse_plant_id(id_text))
+    today = date.today()
+    when = core.parse_watering_date(date_text, today) if date_text.strip() else today
+    if core.add_watering(conn, plant.id, when):
+        return f"Watered {core.format_id(plant.id)} {plant.name} on {core.format_date(when)}."
+    return f"Already recorded for {core.format_date(when)}. Nothing was changed."
+
 def main() -> None:
     """Show the table, read a comment, repeat until the user types 'Quit'."""
     conn = core.connect()
     while True:
         print_table(core.get_all_plants(conn), date.today())
-        command = input("Add or Quit > ").strip().lower()
-        if command == "add":
-            add_screen(conn)
-        elif command == "quit":
-            break
-        else:
-            print("Type Add or Quit.")    
+        word, rest = parse_command(input("add, water <ID> <date>, or quit > "))
+        try:
+            if word == "add":
+                add_screen(conn)
+            elif word == "water":
+                print(water_command(conn, rest))
+            elif word == "quit":
+                break
+            elif word:
+                print("Type add, water or quit.")
+        except (core.ValidationError, core.PlantNotFound) as error:
+            print(f"  ! {error}")
     conn.close()
     
 if __name__ == "__main__":

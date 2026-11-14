@@ -5,12 +5,13 @@ Author: X9J77
 
 import calendar
 import sqlite3
-from dataclasses import dataclass
-from datetime import date
+from dataclasses import dataclass, field
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 
 DB_FILENAME = "plants.db"
+DATE_FORMAT = "%d/%m/%Y"  # Day-Month-Year
 
 
 MAX_NAME = 20               #Sets the max and minum length of the name, type, location and interval days
@@ -18,7 +19,7 @@ MAX_TYPE = 20
 MAX_LOCATION = 20
 MIN_INTERVAL_DAYS = 1
 MAX_INTERVAL_DAYS = 365
-MAX_AGE_YEARS = 100
+MAX_AGE_YEARS = 999
 
 
 FIELD_LABLES = {
@@ -29,13 +30,14 @@ FIELD_LABLES = {
 
 @dataclass
 class Plant:
+    
     id: int | None          #Value set to None until the database assigns an ID to the plant
     name: str               #The name of the plant
     plant_type: str         #The type of the plant
     location: str           #The location of the plant
     interval_days: int      #The watering interval in days
     acquired: date          #The date the plant was acquired
-
+    waterings: list[date] = field(default_factory=list)  #List of dates the plant was watered, defaulting to an empty list
 
 class ValidationError(Exception):
     """ Raised when a value failes its rule
@@ -48,6 +50,9 @@ class ValidationError(Exception):
         super().__init__(message)
         self.field = field_name
         self.message = message
+        
+class PlantNotFound(Exception):
+    """An ID was given that no plant has. Raised by get_plant_by_id()"""
         
         
 #************************************************************
@@ -67,7 +72,7 @@ def clean_text(raw: str, field_name: str, max_len: int) -> str:
         raise ValidationError(field_name, f"{label} cannot be empty.")
     if len(text) > max_len:
         raise ValidationError( field_name,
-                               f"{label} cannot be longer than {max_len} characters or fewer (That was {len(text)} characters).")
+                               f"{label} must be {max_len} characters or fewer (that was {len(text)}).",)
     return text
     
 def parse_name(raw: str) -> str:
@@ -117,7 +122,29 @@ def parse_age_months(raw: str) -> int:
         raw, "age_months", 0, 11,
         "Months must be a whole number between 0 and 11."
     )
+
+def parse_plant_id(raw: str) -> int:
+    """Read a plant ID typed with or without leading 0's, and check it is a positive whole number"""
+    return parse_whole_number(
+        raw, "plant_id", 1, 9999,
+        f"Plant ID must be a positive whole number between 1 and 9999."
+    )
     
+def parse_date(raw: str, field_name: str= "date") -> date:
+    """Read a date typed as DD/MM/YYYY and check it is a valid date"""
+    try:
+        #strptime() will raise a ValueError if the string is not a valid date
+        return datetime.strptime(raw.strip(), DATE_FORMAT).date()
+    except ValueError:
+        raise ValidationError(field_name, f"Date must be in the format DD/MM/YYYY and be a valid date.") from None
+    
+def parse_watering_date(raw: str, today: date) -> date:
+    """Read a watering date typed as DD/MM/YYYY and check it is a valid date, not in the future"""
+    when = parse_date(raw, "watering_date")
+    if when > today:
+        raise ValidationError("watering_date", "Watering date cannot be in the future.")
+    return when
+
 
 #****************************************************
 # Dates & Age Functions
@@ -155,6 +182,54 @@ def format_age(years: int, months: int) -> str:
         return plural(months, "month")
     return "< 1 month"
 
+def format_date(d: date) -> str:
+    """Format a date as DD-MM-YYYY"""
+    return f"{d.day:02d}/{d.month:02d}/{d.year:04d}"
+
+
+#************************************************************
+# Calculations for watering
+#************************************************************
+
+
+def last_watered(plant: Plant) -> date | None:
+    """Return the last date the plant was watered, or None if it has never been watered"""
+    return max(plant.waterings) if plant.waterings else None
+
+def next_due(plant: Plant) -> date | None:
+    """Return the next date the plant is due to be watered, or None if it has never been watered"""
+    last = last_watered(plant)
+    if last is None:
+        return None
+    return last + timedelta(days=plant.interval_days) 
+
+def days_until_due(plant: Plant, today: date) -> int | None:
+    """Days until the plant is due to be watered, or None if it has never been watered"""
+    due = next_due(plant)
+    if due is None:
+        return None
+    return (due - today).days
+
+
+#********************************************************
+# Display
+#********************************************************
+
+
+def format_id(plant_id: int) -> str:
+    """Format a plant ID as a 4 digit number with leading 0's"""
+    return f"{plant_id:04d}"
+
+def format_next_water(plant: Plant, today: date) -> str:
+    """The next water column: "in X days" or "Overdue by X days" or "Pending" """
+    days = days_until_due(plant, today)
+    if days is None:
+        return "Pending"
+    if days == 0:
+        return "Today"
+    if days > 0:
+        return f"in {plural(days, 'day')}"
+    return f"Overdue by {plural(-days, 'day')}"
 
 #************************************************************
 #   Database Functions
@@ -167,6 +242,12 @@ def connect(path=None) -> sqlite3.Connection:
         path = Path(__file__).resolve().parent / DB_FILENAME
     conn = sqlite3.connect(path)
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA foreign_keys = ON")
+    create_tables(conn)
+    return conn
+
+def create_tables(conn: sqlite3.Connection) -> None:
+    """Create two tables if they are not there already"""    
     conn.execute(
         """
         CREATE TABLE IF NOT EXISTS plants (
@@ -179,9 +260,20 @@ def connect(path=None) -> sqlite3.Connection:
         )
         """
     )
-    return conn
+    
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS care_log (
+            id        INTEGER PRIMARY KEY AUTOINCREMENT,
+            plant_id  INTEGER NOT NULL REFERENCES plants(id) ON DELETE CASCADE,
+            care_date TEXT    NOT NULL,
+            UNIQUE (plant_id, care_date)
+        )
+        """
+    )
+    conn.commit()
 
-def _row_to_plant(row: sqlite3.Row) -> Plant:
+def _row_to_plant(row: sqlite3.Row, waterings: list[date]) -> Plant:
     """Turn a database row into a Plant object"""
     return Plant(
         row["id"],
@@ -189,9 +281,15 @@ def _row_to_plant(row: sqlite3.Row) -> Plant:
         row["plant_type"],
         row["location"],
         row["interval_days"],
-        date.fromisoformat(row["acquired"])
+        date.fromisoformat(row["acquired"]), waterings,
     )
-
+    
+def _require_plant(conn: sqlite3.Connection, plant_id: int) -> None:
+    """Raise PlantNotFound unless a plant with this ID exists."""
+    found = conn.execute("SELECT 1 FROM plants WHERE id = ?", (plant_id,)).fetchone()
+    if found is None:
+        raise PlantNotFound(f"No plant with ID {format_id(plant_id)}.")
+    
 def add_plant(conn,
               name: str,
               plant_type: str,
@@ -211,15 +309,37 @@ def add_plant(conn,
     )
     conn.commit()
     return Plant(cursor.lastrowid, name, plant_type, location, interval_days, acquired)
-    
-def get_all_plants(conn) -> list[Plant]:
-    """Retrun every plant, oldest first"""
+
+def get_history(conn: sqlite3.Connection, plant_id: int) -> list[date]:
+    """Every watering date for one plant, newest frist."""
     rows = conn.execute(
-        "SELECT id, name, plant_type, location, interval_days, acquired FROM plants ORDER BY id"
-        ).fetchall()
-    return [_row_to_plant(row) for row in rows]
+        "SELECT care_date FROM care_log WHERE plant_id = ? ORDER BY care_date DESC",
+        (plant_id,),
+    ).fetchall()
+    return [date.fromisoformat(row["care_date"]) for row in rows]
 
-    
+def get_plant(conn: sqlite3.Connection, plant_id: int) -> Plant:
+    """Load one plant with its waterings. Raises PLantNotFound for unknown IDs."""
+    _require_plant(conn, plant_id)
+    row = conn.execute("SELECT * FROM plants WHERE id = ?", (plant_id,)).fetchone()
+    return _row_to_plant(row, get_history(conn, plant_id))
 
-
-
+def get_all_plants(conn: sqlite3.Connection) -> list[Plant]:
+    """Load every plant with its waterings, in ID order."""
+    plant_rows = conn.execute("SELECT * FROM plants ORDER BY id").fetchall()
+    # One pass over the care log, grouping the dates by plant ID.
+    dates_by_plant: dict[int, list[date]] = {}
+    for row in conn.execute("SELECT plant_id, care_date FROM care_log ORDER BY care_date"):
+        dates_by_plant.setdefault(row["plant_id"], []).append(date.fromisoformat(row["care_date"]))
+    return [_row_to_plant(row, dates_by_plant.get(row["id"], [])) for row in plant_rows]
+        
+def add_watering(conn: sqlite3.Connection, plant_id: int, when: date) -> bool:
+    """Record True if a new entry was stored, or False if that date was already recored
+    allowing for multiple waterings on the same plant on the same day"""
+    _require_plant(conn, plant_id)
+    cursor = conn.execute(
+    "INSERT OR IGNORE INTO care_log (plant_id, care_date) VALUES (?, ?)",
+    (plant_id, when.isoformat()),
+)
+    conn.commit()
+    return cursor.rowcount == 1
