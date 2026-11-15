@@ -8,6 +8,7 @@ import sqlite3
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 from pathlib import Path
+from enum import Enum
 
 
 DB_FILENAME = "plants.db"
@@ -28,15 +29,29 @@ FIELD_LABLES = {
     "location": "Location",}
 
 
+class WaterState(Enum):
+    """The differnt watering states a plant can be in on a given day."""
+    
+    PENDING = "pending"         # No watering recorded yet
+    OVERDUE = "overdue"         #The due date us before the current day
+    TODAY = "today"             #Watering due date is today
+    UPCOMING = "upcoming"       #Plant is due to be watered 
+
+STATE_COLOUR = {
+    WaterState.OVERDUE: "red",
+    WaterState.TODAY: "amber",
+    WaterState.PENDING: "blue",
+    WaterState.UPCOMING: None,
+}
 @dataclass
 class Plant:
     
-    id: int | None          #Value set to None until the database assigns an ID to the plant
-    name: str               #The name of the plant
-    plant_type: str         #The type of the plant
-    location: str           #The location of the plant
-    interval_days: int      #The watering interval in days
-    acquired: date          #The date the plant was acquired
+    id: int | None                                       #Value set to None until the database assigns an ID to the plant
+    name: str                                            #The name of the plant
+    plant_type: str                                      #The type of the plant
+    location: str                                        #The location of the plant
+    interval_days: int                                   #The watering interval in days
+    acquired: date                                       #The date the plant was acquired
     waterings: list[date] = field(default_factory=list)  #List of dates the plant was watered, defaulting to an empty list
 
 class ValidationError(Exception):
@@ -210,6 +225,18 @@ def days_until_due(plant: Plant, today: date) -> int | None:
         return None
     return (due - today).days
 
+def water_state(plant: Plant, today: date) -> WaterState:
+    """ Decides which of the four states a plant is in today """
+    
+    days = days_until_due(plant, today)
+    if days is None:
+        return WaterState.PENDING
+    if days < 0:
+        return WaterState.OVERDUE
+    if days == 0:
+        return WaterState.TODAY
+    return WaterState.UPCOMING
+
 
 #********************************************************
 # Display
@@ -231,6 +258,15 @@ def format_next_water(plant: Plant, today: date) -> str:
         return f"in {plural(days, 'day')}"
     return f"Overdue by {plural(-days, 'day')}"
 
+def status_line(plants: list[Plant], today: date) -> str:
+    """ Quick view status line that displays below CLI table"""
+    counts = {state: 0 for state in WaterState}
+    for plant in plants:
+        counts[water_state(plant, today)] += 1
+    return ( 
+        f"{plural(len(plants), 'plant')} | {counts[WaterState.OVERDUE]} overdue"
+        f" | {counts[WaterState.TODAY]} due today | {counts[WaterState.PENDING]} pending"
+    )
 #************************************************************
 #   Database Functions
 #************************************************************

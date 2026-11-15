@@ -3,9 +3,22 @@ CSC-44102-2026-Coursework
 Author: X9J77
 """
 
+import os
+import sys
+import core
+
 from datetime import date
 
-import core
+ANSI_CODES = {"red": "\033[31m", "amber": "\033[33m", "blue": "\033[34m"}
+ANSI_RESET = "\033[0m"
+
+def colour(text: str, state: core.WaterState) -> str:
+    """Terminal text state colour"""
+    name = core.STATE_COLOUR[state]
+    if name is None or not sys.stdout.isatty() or "NO_COLOR" in os.environ:
+        return text
+    return f"{ANSI_CODES[name]}{text}{ANSI_RESET}"
+
 
 def print_table(plants: list[core.Plant], today: date) -> None:
     """Print the plants in table format"""
@@ -18,9 +31,12 @@ def print_table(plants: list[core.Plant], today: date) -> None:
         print("No plants yet, Type add to add a new plant.")
     for plant in plants:
         age = core.format_age(*core.age_of(plant.acquired, today)) 
-        print(f"{core.format_id(plant.id):<4} {plant.name:<20} {age:<9}  "
-              f"{plant.plant_type:<12} {plant.location:<12}  "
+        row = (f"{core.format_id(plant.id):<4}  {plant.name:<20}  {age:<9}  "
+              f"{plant.plant_type:<12}  {plant.location:<12}  "
               f"{core.format_next_water(plant, today)}")
+        print(colour(row, core.water_state(plant, today)))
+    print("-" * len(heading))
+    print(core.status_line(plants, today))
     print()
     
 def parse_command(line: str) -> tuple[str, str]:
