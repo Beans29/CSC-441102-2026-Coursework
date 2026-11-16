@@ -201,6 +201,39 @@ def format_date(d: date) -> str:
     """Format a date as DD-MM-YYYY"""
     return f"{d.day:02d}/{d.month:02d}/{d.year:04d}"
 
+def plant_to_fields(plant: Plant, today: date) -> dict:
+    """Return a plant's editable values: the shape the edit screen works on."""
+    years, months = age_of(plant.acquired, today)
+    return {
+        "name": plant.name,
+        "plant_type": plant.plant_type,
+        "location": plant.location,
+        "interval_days": plant.interval_days,
+        "age_years": years,
+        "age_months": months,
+    }
+
+def make_plant(clean: dict, today: date, original: Plant) -> Plant:
+    """Build the edited Plant from checked values.
+
+    The stored acquired date is kept unless the age was actually changed. An
+    age is only precise to the month, so recalculating the date on every save
+    would slowly shift it. The ID and the watering history carry over.
+    """
+    age = (clean["age_years"], clean["age_months"])
+    if age == age_of(original.acquired, today):
+        acquired = original.acquired
+    else:
+        acquired = acquired_from_age(age[0], age[1], today)
+    return Plant(
+        id=original.id,
+        name=clean["name"],
+        plant_type=clean["plant_type"],
+        location=clean["location"],
+        interval_days=clean["interval_days"],
+        acquired=acquired,
+        waterings=list(original.waterings),
+    )
 
 #************************************************************
 # Calculations for watering
@@ -225,6 +258,21 @@ def days_until_due(plant: Plant, today: date) -> int | None:
         return None
     return (due - today).days
 
+
+def days_since_watered(plant: Plant, today: date) -> int | None:
+    """The days since the last watering, or none if never watered"""
+    last = last_watered(plant)
+    if last is None:
+        return None
+    return (today - last).days
+
+def days_overdue(plant: Plant, today: date) -> int:
+    """How many days late the watering is, will display 0 if it is not late"""
+    days = days_until_due(plant, today)
+    if days is None or days >= 0:
+        return 0 
+    return -days
+
 def water_state(plant: Plant, today: date) -> WaterState:
     """ Decides which of the four states a plant is in today """
     
@@ -236,7 +284,6 @@ def water_state(plant: Plant, today: date) -> WaterState:
     if days == 0:
         return WaterState.TODAY
     return WaterState.UPCOMING
-
 
 #********************************************************
 # Display
@@ -267,6 +314,28 @@ def status_line(plants: list[Plant], today: date) -> str:
         f"{plural(len(plants), 'plant')} | {counts[WaterState.OVERDUE]} overdue"
         f" | {counts[WaterState.TODAY]} due today | {counts[WaterState.PENDING]} pending"
     )
+
+def details_rows(plant: Plant, today: date) -> list[tuple[str, str]]:
+    """Lines of the details page, as (lable, value) pairs"""
+    years, months = age_of(plant.acquired, today)
+    last = last_watered(plant)
+    if last is None:
+        last_text = "Never"
+        due_text = "Pending"
+    else:
+        since = days_since_watered(plant, today)
+        ago = "today" if since == 0 else f"{plural(since, 'day')} ago"
+        last_text = f"{format_date(last)} ({ago})"
+        due_text = f"{format_date(next_due(plant))} ({format_next_water(plant, today)})"
+    return [
+        ("Type", plant.plant_type),
+        ("Location", plant.location),
+        ("Age", format_age(years, months)),
+        ("Water every", plural(plant.interval_days, "day")),
+        ("Last watered", due_text),
+        ("Next water", due_text),
+        ("Days overdue", str(days_overdue(plant, today))),
+    ]
 #************************************************************
 #   Database Functions
 #************************************************************
@@ -368,6 +437,23 @@ def get_all_plants(conn: sqlite3.Connection) -> list[Plant]:
     for row in conn.execute("SELECT plant_id, care_date FROM care_log ORDER BY care_date"):
         dates_by_plant.setdefault(row["plant_id"], []).append(date.fromisoformat(row["care_date"]))
     return [_row_to_plant(row, dates_by_plant.get(row["id"], [])) for row in plant_rows]
+
+def update_plant(conn: sqlite3.Connection, plant: Plant) -> None:
+    """Saves the edited details of an existing plant"""
+    _require_plant(conn, plant.id)
+    conn.execute(
+        "UPDATE plants SET name = ?, plant_type = ?, location = ?, interval_days = ?,"
+        " acquired = ?, WHERE id = ?"
+        (plant.name, plant.plant_type, plant.location, plant.interval_days, plant.acquired.isoformat(), plant.id),
+    )
+    conn.commit()
+    
+def delete_plant(conn: sqlite3.Connection, plant_id: int) -> None:
+    """Delete a plant"""
+    _require_plant(conn, plant_id)
+    conn.execute("DELETE FROM plants WHERE id = ?", (plant_id))
+    conn.commit()
+    
         
 def add_watering(conn: sqlite3.Connection, plant_id: int, when: date) -> bool:
     """Record True if a new entry was stored, or False if that date was already recored
