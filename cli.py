@@ -179,7 +179,7 @@ def field_lines(fields: dict) -> list[tuple[str, str]]:
     age = f"{core.plural(fields['age_years'], 'year')} {core.plural(fields['age_months'], 'month')}"
     return [
         ("Name", fields["name"]),
-        ("Type", fields["plant_type"]),
+        ("Type", fields["plant_type"]), 
         ("Location", fields["location"]),
         ("Water every", core.plural(fields["interval_days"], "days")),
         ("Age", age),
