@@ -336,6 +336,106 @@ def details_rows(plant: Plant, today: date) -> list[tuple[str, str]]:
         ("Next water", due_text),
         ("Days overdue", str(days_overdue(plant, today))),
     ]
+
+#************************************************************
+#  Lists
+#************************************************************ 
+
+SORT_KEYS = {
+    "id": lambda plant, today: plant.id,
+    "name": lambda plant, today: plant.name.casefold(),
+    "age": lambda plant, today: (today - plant.acquired).days,
+    "type": lambda plant, today: plant.plant_type.casefold(),
+    "location": lambda plant, today: plant.location.casefold,
+    "last": lambda plant, today: last_watered(plant),
+    "next": lambda plant, today: next_due(plant),
+}
+
+def sort_plants(plants: list[plant], column: str, today: date, descending: bool = False) -> list[Plant]:
+    """ Returns the plants sorted by one column.
+    
+        plants with equal keys keep the order they came in.
+        plants with no valure for the column come last in the sorted list
+    """
+    if column not in SORT_KEYS:
+        raise ValidationError("sort", f"Sort by one of: {', '.join(SORT_KEYS)}.")
+    key = SORT_KEYS[column]
+    with_value = [plant for plant in plants if key(plant, today) is not None]
+    without_value = [plant for plant in plants if key(plant, today) is None]
+    ordered = sorted(with_value, key=lambda plant: key(plant, today), reverse=descending)
+    return ordered + without_value
+
+def search_plants(plants: list [Plant], term: str) -> list[Plant]:
+    """ Linear search: the plants who's name or location contains 'term'
+    
+    Every plant is checked once. case is ignored
+    """
+    wanted = " ".join(term.split()).casefold()
+    if not wanted:
+        return list(plants)
+    matches = []
+    for plant in plants:
+        if wanted in plant.name.casefold() or wanted in plant.location.casefold():
+            matches.append(plant)
+    return matches
+
+def filter_by_location(plants: list[Plant], location: str) -> list[Plant]:
+    """Fileters plants by location """
+    wanted = " ".join(location.split()).casefold()
+    return [plant for plant in plants if plant.location.casefold() == wanted]
+
+def known_locations(plants: list[Plant]) -> list[str]:
+    """Lists every location in use in alphabetical order"""
+    spelling_by_key: dict[str, str] = {}
+    for plant in plants:
+        spelling_by_key.setdefault(plant.location.casefold(), plant.location)
+    return [spelling_by_key[key] for key in sorted(spelling_by_key)]
+
+def today_view(plants: list[Plant], today: date) -> list[plant]:
+    """Picks the plants and orders them by urgency
+    
+    1: Keep the overdue, due-today and never-watered plants
+    2: overdue dirst (most overdue at the top), then due today,
+    then never watered. Ties are broken by name"""
+    
+    needs_attention = []
+    for plant in plants:
+        if water_state(plant, today) is not WaterState.UPCOMING:
+            needs_attention.append(plant)
+            
+    group_order = {WaterState.OVERDUE: 0, WaterState.TODAY: 1, WaterState.PENDING: 2}
+    
+    def rank(plant: Plant) -> tuple[int, int, str]:
+        """Tuples compare item by item: group friat, then days overdue, then name """
+        return (
+            group_order[water_state(plant, today)],
+            -days_overdue(plant, today),
+            plant.name.casefold(),
+        )
+        
+    return sorted(needs_attention, key=rank)
+
+def visible_plants(
+    plants: list[Plant],
+    today: date,
+    search: str = "",
+    location: str = "",
+    today_only: bool = False,
+    sort_column: str = "id",
+    descending: bool = False,
+) -> list [Plant]:
+    
+    """ Applys what the table is currently showinf: search, then filter, then order.
+        Today view has its own ranking, so that column is ignored
+    """
+    shown = search_plants(plants, search)
+    if location:
+        shown = filter_by_location(shown, location)
+    if today_only:
+        return today_view(shown, today)
+    return sort_plants(shown, sort_column, today, descending)
+    
+
 #************************************************************
 #   Database Functions
 #************************************************************
