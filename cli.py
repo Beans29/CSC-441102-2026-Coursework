@@ -5,6 +5,8 @@ Author: X9J77
 
 import os
 import sys
+from dataclasses import dataclass
+from datetime import date
 import core
 
 from datetime import date
@@ -13,6 +15,17 @@ ANSI_CODES = {"red": "\033[31m", "amber": "\033[33m", "blue": "\033[34m"}
 ANSI_RESET = "\033[0m"
 
 HISTORY_SHOWN = 10
+
+@dataclass
+class View:
+    """What the tables are displaying.
+    """
+    
+    sort_column: str = "id"
+    descending: bool = False
+    search: str = ""
+    location: str = ""
+    today_only: bool = False
 
 def colour(text: str, state: core.WaterState) -> str:
     """Terminal text state colour"""
@@ -41,6 +54,49 @@ def print_table(plants: list[core.Plant], today: date) -> None:
     print(core.status_line(plants, today))
     print()
     
+def describe_filter(view: View, shown: int, total: int) -> str:
+    """
+    A line saying what is being hidden, or "" if nothing is.
+    """
+    reasons = []
+    if view.search:
+        reasons.append(f'find "{view.search}"')
+    if view.location:
+        reasons.append(f"location {view.location}")
+    if view.today_only:
+        reasons.append("today view")
+    if not reasons:
+        return ""
+    return f"Showing {shown} of {core.plural(total, 'plant')} ({', '.join(reasons)}). Type all to clear."
+
+def describe_order(view: View) -> str:
+    """
+    Says how the rows are ordered
+    """
+    if view.today_only:
+        return "Ranked by urgency"
+    return f"sorted by: {view.sort_column}{' (desc)' if view.descending else ''}"
+
+def draw_table_screen(plants: list[core.Plant], shown: list[core.plant], view: View, today: date) -> None:
+    """
+    Draws the table, then what is hidden, + the counts and rows are ordered
+    """
+    if shown:
+        print_table(shown, today)
+    else:
+        print()
+        if not plants:
+            print("No plants yet. Type add to add one")
+        elif view.today_only and not (view.search or view.location):
+            print("Nothing needs attention today.")
+        else:
+            print("No plants match")
+        filter_line = describe_filter(view, len(shown), len(plants))
+        if filter_line:
+            print(filter_line)
+        print(f"{core.status_line(plants, today)}   |   {describe_order(view)}")
+        print()
+
 def parse_command(line: str) -> tuple[str, str]:
     """Split what the user typed into a command word and the rest. 
     E.g "water 1" gives ("water", "1")."""
@@ -222,6 +278,49 @@ def edit_screen(conn, plant: core.Plant) -> str:
             return "Cancelled. nothing was changed"
         elif word:
             print("Type a number, save or cancel")
+
+def sort_command(view: View, rest: str) -> None:
+    """ 
+    Handle 'sort <column> [desc]'.
+    """
+    args = rest.lower().split()
+    if not args or args[0] not in core.SORT_KEYS or args[1:] not in ([], ["desc"], ["asc"]):
+        raise core.ValidationError(
+            "command", f"Use: sort <column> [desc]. Columns: {', '.join(core.SORT_KEYS)}.")
+    view.sort_column = args[0]
+    view.descending = args[1:] == ["desc"]
+    if view.today_only:
+        print("  The today view is always ranked by urgency. Type all to see the sorted table")
+
+def location_command(conn, view: View, rest: str) -> None:
+    """
+    Handle 'location <name>': and only show the plants in that location.
+    """
+    wanted = " ".join(rest.split())
+    if not wanted:
+        raise core.ValidationError("command", "Use: location <name>, for example location kitchen.")
+    known = core.known_locations(core.get_all_plants(conn))
+    matches = [name for name in known if name.casefold() == wanted.casefold()]
+    if not matches:
+        options = ", ".join(known) if known else "no plants yet"
+        raise core.ValidationError("location", f"No plants in {wanted}. Locations: {options}.")
+    view.location = matches[0]
+    
+def find_command(view: View, rest: str) -> None:
+    """
+    Handles 'find <text>' : shows only plants whos name or location contains the text
+    """
+    if not rest.strip():
+        raise core.ValidationError("command", "Use: find <text>.")
+    view.search = " ".join(rest.split())
+    
+def clear_view(view: View) -> None:
+    """
+    Handles all
+    """
+    view.search = ""
+    view.location = ""
+    view.today_only = False
     
 def main() -> None:
     """Show the table, read a comment, repeat until the user types 'Quit'."""
