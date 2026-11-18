@@ -16,7 +16,7 @@ DATE_FORMAT = "%d/%m/%Y"  # Day-Month-Year
 
 
 MAX_NAME = 20               #Sets the max and minum length of the name, type, location and interval days
-MAX_TYPE = 20
+MAX_TYPE = 12
 MAX_LOCATION = 20
 MIN_INTERVAL_DAYS = 1
 MAX_INTERVAL_DAYS = 365
@@ -332,7 +332,7 @@ def details_rows(plant: Plant, today: date) -> list[tuple[str, str]]:
         ("Location", plant.location),
         ("Age", format_age(years, months)),
         ("Water every", plural(plant.interval_days, "day")),
-        ("Last watered", due_text),
+        ("Last watered", last_text),
         ("Next water", due_text),
         ("Days overdue", str(days_overdue(plant, today))),
     ]
@@ -346,12 +346,12 @@ SORT_KEYS = {
     "name": lambda plant, today: plant.name.casefold(),
     "age": lambda plant, today: (today - plant.acquired).days,
     "type": lambda plant, today: plant.plant_type.casefold(),
-    "location": lambda plant, today: plant.location.casefold,
+    "location": lambda plant, today: plant.location.casefold(),
     "last": lambda plant, today: last_watered(plant),
     "next": lambda plant, today: next_due(plant),
 }
 
-def sort_plants(plants: list[plant], column: str, today: date, descending: bool = False) -> list[Plant]:
+def sort_plants(plants: list[Plant], column: str, today: date, descending: bool = False) -> list[Plant]:
     """ Returns the plants sorted by one column.
     
         plants with equal keys keep the order they came in.
@@ -391,7 +391,40 @@ def known_locations(plants: list[Plant]) -> list[str]:
         spelling_by_key.setdefault(plant.location.casefold(), plant.location)
     return [spelling_by_key[key] for key in sorted(spelling_by_key)]
 
-def today_view(plants: list[Plant], today: date) -> list[plant]:
+@dataclass
+class LocationSummary:
+    """
+    One row of location summery>
+    """
+    
+    location: str
+    plants: int
+    due_today: int
+    overdue: int
+    
+def location_summary(plants: list[Plant], today: date) -> list[LocationSummery]:
+    """
+    Counts the plants, the ones that are due today and the overdue ones in each location.
+    
+    One pass over the plants, while a dictionary holds one row per location, allowing
+    finding of a loaction's row to be quick depending on the number of plants.
+    Case is ignored for locations so Kitchen and kitchen are the same.
+    """
+    summaries: dict[str, LocationSummery] = {}
+    for plant in plants:
+        key = " ".join(plant.location.split()).casefold()
+        if key not in summaries:
+            summaries[key] = LocationSummery(plant.location, 0, 0, 0)
+        summary = summaries[key]
+        summary.plants += 1
+        state = water_state(plant, today)
+        if state is WaterState.TODAY:
+            summary.due_today +=1
+        elif state is WaterState.OVERDUE:
+            summary.overdue += 1
+    return [summaries[key] for key in sorted(summaries)]
+
+def today_view(plants: list[Plant], today: date) -> list[Plant]:
     """Picks the plants and orders them by urgency
     
     1: Keep the overdue, due-today and never-watered plants
@@ -543,7 +576,7 @@ def update_plant(conn: sqlite3.Connection, plant: Plant) -> None:
     _require_plant(conn, plant.id)
     conn.execute(
         "UPDATE plants SET name = ?, plant_type = ?, location = ?, interval_days = ?,"
-        " acquired = ?, WHERE id = ?"
+        " acquired = ? WHERE id = ?"
         (plant.name, plant.plant_type, plant.location, plant.interval_days, plant.acquired.isoformat(), plant.id),
     )
     conn.commit()
@@ -551,7 +584,7 @@ def update_plant(conn: sqlite3.Connection, plant: Plant) -> None:
 def delete_plant(conn: sqlite3.Connection, plant_id: int) -> None:
     """Delete a plant"""
     _require_plant(conn, plant_id)
-    conn.execute("DELETE FROM plants WHERE id = ?", (plant_id))
+    conn.execute("DELETE FROM plants WHERE id = ?", (plant_id,))
     conn.commit()
     
         
