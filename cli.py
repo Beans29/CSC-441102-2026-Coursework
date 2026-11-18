@@ -9,8 +9,6 @@ from dataclasses import dataclass
 from datetime import date
 import core
 
-from datetime import date
-
 ANSI_CODES = {"red": "\033[31m", "amber": "\033[33m", "blue": "\033[34m"}
 ANSI_RESET = "\033[0m"
 
@@ -77,7 +75,7 @@ def describe_order(view: View) -> str:
         return "Ranked by urgency"
     return f"sorted by: {view.sort_column}{' (desc)' if view.descending else ''}"
 
-def draw_table_screen(plants: list[core.Plant], shown: list[core.plant], view: View, today: date) -> None:
+def draw_table_screen(plants: list[core.Plant], shown: list[core.Plant], view: View, today: date) -> None:
     """
     Draws the table, then what is hidden, + the counts and rows are ordered
     """
@@ -237,7 +235,7 @@ def field_lines(fields: dict) -> list[tuple[str, str]]:
         ("Name", fields["name"]),
         ("Type", fields["plant_type"]), 
         ("Location", fields["location"]),
-        ("Water every", core.plural(fields["interval_days"], "days")),
+        ("Water every", core.plural(fields["interval_days"], "day")),
         ("Age", age),
     ]
 
@@ -306,6 +304,24 @@ def location_command(conn, view: View, rest: str) -> None:
         raise core.ValidationError("location", f"No plants in {wanted}. Locations: {options}.")
     view.location = matches[0]
     
+def print_locations(summeries: list[core.LocationSummary]) -> None:
+    """
+    Prints one row per location: how many plants, how many are due, and overdue
+    """
+    width = core.MAX_LOCATION
+    heading = f"{'Location':<{width}} {'Plants':>6} {'Due today':>9} {'Overdue':>7}"
+    print()
+    print(heading)
+    print("-" * len(heading))
+    if not summeries:
+        print("No plants yet. Please add one")
+    for row in summeries:
+        print(f"{row.location:<{width}}  {row.plants:>6}  {row.due_today:>9}  {row.overdue:>7}")
+    print("-" * len(heading))
+    total = [sum(getattr(row, name) for row in summeries) for name in ("plants", "due_today", )]
+    print(f"{'Total':<{width}}  {total[0]:>6}  {total[1]:>9}  {total[2]:>7}")
+
+
 def find_command(view: View, rest: str) -> None:
     """
     Handles 'find <text>' : shows only plants whos name or location contains the text
@@ -327,9 +343,21 @@ def main() -> None:
     if os.name == "nt":
         os.system("")   #Windows terminal colour support
     conn = core.connect()
+    view = View()
     while True:
-        print_table(core.get_all_plants(conn), date.today())
-        word, rest = parse_command(input("<ID> to open, add, water <ID> <date>, or quit > "))
+        today = date.today()
+        plants = core.get_all_plants(conn)
+        shown = core.visible_plants(
+            plants, today,
+            search=view.search,
+            location=view.location,
+            today_only=view.today_only,
+            sort_column=view.sort_column,
+            descending=view.descending,
+        )
+        draw_table_screen(plants, shown, view, today)
+        print("<ID> open | add | water <ID> [date] | sort <column> [desc] | find <text>")
+        word, rest = parse_command(input("location <name> | locations | today | all | quit > "))
         try:
             if word.isdigit():
                 message = details_screen(conn, core.parse_plant_id(word))
@@ -339,13 +367,26 @@ def main() -> None:
                 add_screen(conn)
             elif word == "water":
                 print(water_command(conn, rest))
+            elif word == "sort":
+                sort_command(view, rest)
+            elif word == "find":
+                find_command(view, rest)
+            elif word == "location":
+                location_command(conn, view, rest)
+            elif word == "locations":
+                print_locations(core.location_summary(plants, today))
+            elif word == "today":
+                view.today_only = True
+            elif word == "all":
+                clear_view(view)
             elif word == "quit":
                 break
             elif word:
-                print("Type an ID, water or quit.")
+                print("Unknown command. Use an ID, add, water, sort, find, location, locations, today, all or quit.")
         except (core.ValidationError, core.PlantNotFound) as error:
             print(f"  ! {error}")
     conn.close()
-    
+
+
 if __name__ == "__main__":
     main()
