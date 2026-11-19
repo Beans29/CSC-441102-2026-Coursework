@@ -7,7 +7,9 @@ import os
 import sys
 from dataclasses import dataclass
 from datetime import date
+
 import core
+
 
 ANSI_CODES = {"red": "\033[31m", "amber": "\033[33m", "blue": "\033[34m"}
 ANSI_RESET = "\033[0m"
@@ -321,6 +323,45 @@ def print_locations(summeries: list[core.LocationSummary]) -> None:
     total = [sum(getattr(row, name) for row in summeries) for name in ("plants", "due_today", )]
     print(f"{'Total':<{width}}  {total[0]:>6}  {total[1]:>9}  {total[2]:>7}")
 
+def clean_path(text: str) -> str:
+    """
+    Turns whas the user typed into a file path
+    """
+    return os.path.expanduser(text.strip().strip("\"'"))
+
+def import_command(conn, rest: str) -> None:
+    """
+    Handles 'import <file>'. And chesks the whole file, then adds its plants after a tyoed yes
+    """
+    path = clean_path(rest)
+    if not path:
+        raise core.ValidationError(
+            "command", "Use: import <file>.")
+    try:
+        plants = core.read_import_file(path, date.today())
+    except core.ImportFailed as failure:
+        print(f"Nothing was imported. {core.plural(len(failure.errors), 'problem')} found in {path}:")
+        for problem in failure:
+            print(f"    ! {problem}")
+        return
+    if confirm(f"{core.plural(len(plants), 'plant')} found in {path}. Type yes to import"):
+        count = core.import_plants(conn, plants)
+        print(f"Imported {core.plural(count, 'plant')}.")
+    else:
+        print("Nothing was imported.")
+        
+
+def export_command(conn, rest: str) -> None:
+    """Handle `export <file>`: write every plant and its history to a JSON file."""
+    path = clean_path(rest)
+    if not path:
+        raise core.ValidationError(
+            "command", "Use: export <file>, for example export my_plants.json.")
+    if os.path.exists(path) and not confirm(f"{path} already exists. Type yes to replace it: "):
+        print("Nothing was exported.")
+        return
+    count = core.export_plants(conn, path)
+    print(f"Exported {core.plural(count, 'plant')} to {path}.")
 
 def find_command(view: View, rest: str) -> None:
     """
@@ -375,6 +416,10 @@ def main() -> None:
                 location_command(conn, view, rest)
             elif word == "locations":
                 print_locations(core.location_summary(plants, today))
+            elif word == 'import':
+                import_command(conn, rest)
+            elif word == "export":
+                export_command(cpnn, rest)
             elif word == "today":
                 view.today_only = True
             elif word == "all":

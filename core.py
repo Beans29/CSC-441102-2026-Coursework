@@ -9,6 +9,7 @@ from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from enum import Enum
+import json
 
 
 DB_FILENAME = "plants.db"
@@ -68,6 +69,16 @@ class ValidationError(Exception):
         
 class PlantNotFound(Exception):
     """An ID was given that no plant has. Raised by get_plant_by_id()"""
+    
+class ImportFailed(Exception):
+    """
+    An import file had problems. 
+    'errors' holds one line for each problem found
+    """
+    
+    def __init__(slef, errors: list[str]):
+        super().__init__(f"{len(errors)} problem(s) found")
+        slef.error = errors
         
         
 #************************************************************
@@ -86,8 +97,7 @@ def clean_text(raw: str, field_name: str, max_len: int) -> str:
     if not text:
         raise ValidationError(field_name, f"{label} cannot be empty.")
     if len(text) > max_len:
-        raise ValidationError( field_name,
-                               f"{label} must be {max_len} characters or fewer (that was {len(text)}).",)
+        raise ValidationError( field_name, f"{label} must be {max_len} characters or fewer (that was {len(text)}).",)
     return text
     
 def parse_name(raw: str) -> str:
@@ -402,7 +412,7 @@ class LocationSummary:
     due_today: int
     overdue: int
     
-def location_summary(plants: list[Plant], today: date) -> list[LocationSummery]:
+def location_summary(plants: list[Plant], today: date) -> list[LocationSummary]:
     """
     Counts the plants, the ones that are due today and the overdue ones in each location.
     
@@ -410,11 +420,11 @@ def location_summary(plants: list[Plant], today: date) -> list[LocationSummery]:
     finding of a loaction's row to be quick depending on the number of plants.
     Case is ignored for locations so Kitchen and kitchen are the same.
     """
-    summaries: dict[str, LocationSummery] = {}
+    summaries: dict[str, LocationSummary] = {}
     for plant in plants:
         key = " ".join(plant.location.split()).casefold()
         if key not in summaries:
-            summaries[key] = LocationSummery(plant.location, 0, 0, 0)
+            summaries[key] = LocationSummary(plant.location, 0, 0, 0)
         summary = summaries[key]
         summary.plants += 1
         state = water_state(plant, today)
@@ -527,6 +537,29 @@ def _require_plant(conn: sqlite3.Connection, plant_id: int) -> None:
     found = conn.execute("SELECT 1 FROM plants WHERE id = ?", (plant_id,)).fetchone()
     if found is None:
         raise PlantNotFound(f"No plant with ID {format_id(plant_id)}.")
+
+def _insert_plant(conn: sqlite3.Connection, plant: Plant) -> int:
+    """
+    Inserts a plant and its waterins without committing, returns the new ID
+    
+    the caller commits, so several plants can be saved in one action
+    """
+    cursor = conn.execute(
+        "INSERT INTO plants (name, plant_type, location, interval_days, acquired)"
+        " VALUES (?, ?, ?, ?, ?)",
+        (plant.name,
+         plant.plant_type,
+         plant.location,
+         plant.interval_days,
+         plant.acquired.isoformat)
+    )
+    plant_id = cursor.lastrowid
+    for when in plant.waterings:
+        conn.execute(
+          "INSERT OR IGNORE INTO care_log (plant_id, care_date) VALUES (?, ?)",
+          (plant_id, when.isoformat())  
+        )
+    return plant_id
     
 def add_plant(conn,
               name: str,
@@ -598,3 +631,146 @@ def add_watering(conn: sqlite3.Connection, plant_id: int, when: date) -> bool:
 )
     conn.commit()
     return cursor.rowcount == 1
+
+#******************************************************
+# Imports and Exports
+#******************************************************
+
+# Describes how each JSON value type is in a import error
+
+JSON_TYPE_NAMES = {str: "text in quotes", int: "A whole number", list: "A list"}
+
+def _read_key(record: dict, key: str, kind: type, parse, problems: list[str]):
+    """
+    Checks one key of an import record
+    
+    The key must be there, and hold the right type of JSON valur=e, and pass the
+    same rule as the forms. returns a cleaned value or none after adding a line to problems
+    """
+    if key not in record:
+        problems.append(f"{key}: is missing.")
+        return None
+    value = record[key]
+    """
+    type() was chosen over isinstance(), as python counts true and false as 1's & 0's,
+    and we need an interval to not be accespted as a 1 or 0
+    """
+    if type(value) is not kind:
+        problems.append(f"{key}: must be {JSON_TYPE_NAMES[kind]}.")
+        return None
+    try:
+        return parse(value)
+    except ValidationError as error:
+        problems.append(f"{key}: {error.message}")
+        return None
+
+def _plant_from_record(record, today: date) -> tuple[Plant | None, list[str]]:
+    """
+    Check one plant from an import file. Returns (plant, problems).
+    """
+    if not isinstance(record, dict):
+        return None, ["must be an object in curly brakcets"]
+    problems: list[str] = []
+    name = _read_key(record, "name", str, parse_name, problems)
+    plant_type = _read_key(record, "type", str, parse_type, problems)
+    location = _read_key(record, "location", str, parse_location, problems)
+    interval = _read_key(record, "interval_days", int, lambda number: parse_interval_days(str(number)), problems)
+    acquired = _read_key(record, "aquired", str, parse_date, problems)
+    if acquired is not None:
+        if acquired > today:
+            problems.append("aquired: cannot be in the future.")
+        elif age_of(acquired, today)[0] > MAX_AGE_YEARS:
+            problems.append(f"acquired: cannot be more than {MAX_AGE_YEARS} years ago.")
+    
+    waterings: set[date] = set()
+    entires = record.get("waterings", [])
+    if type(entires) is not list:
+        problems.append("waterings: must be a list of dates.")
+    else:
+        for position, entry in enumerate(entires, start=1):
+            if type(entry) is not str:
+                problems.append(f"waterings, entry {position}: must be a date in quotes.")
+                continue
+            try:
+                waterings.add(parse_watering_date(entry, today))
+            except ValidationError as error:
+                problems.append(f"waterings, entry {position}: {error.message}")
+            
+    if problems:
+        return None, problems
+    return Plant(None, name, plant_type, location, interval, acquired, sorted(waterings)), []
+
+def read_import_files(path, today: date) -> list[Plant]:
+    """
+    Reads and checks a JSON import file
+    
+    returns the plants ready to import. if anything is wrong, it raises 
+    ImportFailed listing the problem, so one bad record means nothing is imported
+    allowing the user to fix the broken file
+    """
+    try: 
+        with open(path, encoding="utf-8") as file:
+            data = json.load(file)
+    except FileNotFoundError:
+        raise ImportFailed([f"The file was not found: {path}"]) from None
+    except OSError as error:
+        raise ImportFailed([f"The file could not be opened ({error.strerror})"]) from None
+    except ValueError as error:
+        raise ImportFailed([f"The file is not valid JSON ({error})"]) from None
+    
+    if not isinstance(data, dict) or type(data.get("plants")) is not list:
+        raise ImportFailed(['The file must be a JSON object holding a plant list'])
+    if not data["plants"]:
+        raise ImportFailed(["The file has no plants in it"])
+    
+    plants: list[Plant] = []
+    errors: list[str] = []
+    for number, record in enumerate(data["plants"], start=1):
+        plant, problems = _plant_from_record(record, today)
+        error.extend(f"Plant {number}, {problem}" for problem in problems)
+        if plant is not None:
+            plants.append(plant)
+        if errors:
+            raise ImportFailed(errors)
+        return plants
+
+def import_plants(conn: sqlite3.Connection, plants: list[Plant]) -> int:
+    """
+    Save plants returned by read_import_file. returns how many were added.
+    
+    All the inserts share one transaction, so either every plant is added or,
+    if anything goes wrong half wat through, no plants are effected
+    """
+    with conn:
+        for plant in plants:
+            _insert_plant(conn, plants)
+    return len(plants)
+
+def export_plants(conn: sqlite3.Connection, path) -> int:
+    """
+    Writes every plant and its history to a JSON file, and retuns how many
+    """
+    plants = get_all_plants(conn)
+    data = {
+        "plants": [
+            {
+                "name": plant.name,
+                "type": plant.plant_type,
+                "loction": plant.location,
+                "interval_days": plant.interval_days,
+                "acquired": format_date(plant.acquired),
+                "waterings": [format_date(when) for when in sorted(plant.waterings)],
+            }
+            for plant in plants
+        ]
+    }
+    try:
+        with open(path, "w", encoding="utf-8") as file:
+            json.dump(date, file, indent=2, ensure_ascii=False)
+            file.write("\n")
+    except OSError as error:
+        raise ValidationError("path", f"That file could not be written ({error.strerror}).") from None
+    return len(plants)
+
+        
+        
