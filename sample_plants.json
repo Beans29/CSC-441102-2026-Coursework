@@ -1,0 +1,568 @@
+{
+  "plants": [
+    {
+      "name": "Bonsai",
+      "type": "Tree",
+      "location": "Hallway",
+      "interval_days": 3,
+      "acquired": "27/04/2026",
+      "waterings": [
+        "02/11/2026",
+        "05/11/2026",
+        "09/11/2026",
+        "13/11/2026",
+        "17/11/2026"
+      ]
+    },
+    {
+      "name": "Cactus",
+      "type": "Succulent",
+      "location": "Dining room",
+      "interval_days": 21,
+      "acquired": "10/12/2022",
+      "waterings": [
+        "12/10/2026",
+        "02/11/2026"
+      ]
+    },
+    {
+      "name": "Monstera",
+      "type": "Foliage",
+      "location": "Living room",
+      "interval_days": 7,
+      "acquired": "23/06/2022",
+      "waterings": [
+        "23/10/2026",
+        "01/11/2026",
+        "09/11/2026"
+      ]
+    },
+    {
+      "name": "Basil",
+      "type": "Herb",
+      "location": "Bathroom",
+      "interval_days": 3,
+      "acquired": "08/07/2022",
+      "waterings": [
+        "12/11/2026",
+        "14/11/2026",
+        "18/11/2026"
+      ]
+    },
+    {
+      "name": "Aloe Vera",
+      "type": "Succulent",
+      "location": "Conservatory",
+      "interval_days": 14,
+      "acquired": "03/01/2021",
+      "waterings": []
+    },
+    {
+      "name": "Snake Plant",
+      "type": "Foliage",
+      "location": "Bathroom",
+      "interval_days": 14,
+      "acquired": "02/03/2024",
+      "waterings": []
+    },
+    {
+      "name": "Peace Lily",
+      "type": "Flowering",
+      "location": "Bedroom",
+      "interval_days": 7,
+      "acquired": "11/08/2026",
+      "waterings": [
+        "09/11/2026"
+      ]
+    },
+    {
+      "name": "Spider Plant",
+      "type": "Foliage",
+      "location": "Hallway",
+      "interval_days": 7,
+      "acquired": "14/03/2021",
+      "waterings": [
+        "31/10/2026",
+        "06/11/2026",
+        "12/11/2026",
+        "19/11/2026"
+      ]
+    },
+    {
+      "name": "Rosemary",
+      "type": "Herb",
+      "location": "Conservatory",
+      "interval_days": 5,
+      "acquired": "26/12/2020",
+      "waterings": [
+        "14/11/2026",
+        "18/11/2026"
+      ]
+    },
+    {
+      "name": "Mint",
+      "type": "Herb",
+      "location": "Office",
+      "interval_days": 2,
+      "acquired": "20/06/2025",
+      "waterings": [
+        "10/11/2026",
+        "12/11/2026",
+        "14/11/2026",
+        "16/11/2026",
+        "18/11/2026"
+      ]
+    },
+    {
+      "name": "Fiddle Leaf Fig",
+      "type": "Tree",
+      "location": "Conservatory",
+      "interval_days": 7,
+      "acquired": "03/12/2021",
+      "waterings": [
+        "11/11/2026",
+        "20/11/2026"
+      ]
+    },
+    {
+      "name": "Jade Plant",
+      "type": "Succulent",
+      "location": "Landing",
+      "interval_days": 14,
+      "acquired": "13/07/2024",
+      "waterings": [
+        "16/10/2026",
+        "30/10/2026",
+        "12/11/2026"
+      ]
+    },
+    {
+      "name": "Boston Fern",
+      "type": "Fern",
+      "location": "Kitchen",
+      "interval_days": 3,
+      "acquired": "20/09/2023",
+      "waterings": [
+        "11/11/2026",
+        "14/11/2026",
+        "16/11/2026"
+      ]
+    },
+    {
+      "name": "Orchid",
+      "type": "Flowering",
+      "location": "Kitchen",
+      "interval_days": 7,
+      "acquired": "12/02/2026",
+      "waterings": []
+    },
+    {
+      "name": "Pothos",
+      "type": "Vine",
+      "location": "Hallway",
+      "interval_days": 7,
+      "acquired": "21/02/2026",
+      "waterings": [
+        "14/11/2026"
+      ]
+    },
+    {
+      "name": "Rubber Plant",
+      "type": "Tree",
+      "location": "Living room",
+      "interval_days": 10,
+      "acquired": "21/04/2023",
+      "waterings": [
+        "07/10/2026",
+        "16/10/2026",
+        "27/10/2026",
+        "06/11/2026"
+      ]
+    },
+    {
+      "name": "Lavender",
+      "type": "Herb",
+      "location": "Dining room",
+      "interval_days": 7,
+      "acquired": "04/07/2025",
+      "waterings": []
+    },
+    {
+      "name": "Thyme",
+      "type": "Herb",
+      "location": "Landing",
+      "interval_days": 5,
+      "acquired": "25/07/2023",
+      "waterings": [
+        "16/10/2026",
+        "23/10/2026",
+        "30/10/2026",
+        "06/11/2026",
+        "12/11/2026"
+      ]
+    },
+    {
+      "name": "Parsley",
+      "type": "Herb",
+      "location": "Bathroom",
+      "interval_days": 3,
+      "acquired": "16/05/2022",
+      "waterings": [
+        "05/11/2026",
+        "09/11/2026",
+        "12/11/2026",
+        "17/11/2026"
+      ]
+    },
+    {
+      "name": "Chives",
+      "type": "Herb",
+      "location": "Dining room",
+      "interval_days": 4,
+      "acquired": "27/11/2025",
+      "waterings": [
+        "08/11/2026",
+        "13/11/2026",
+        "17/11/2026"
+      ]
+    },
+    {
+      "name": "ZZ Plant",
+      "type": "Foliage",
+      "location": "Living room",
+      "interval_days": 21,
+      "acquired": "21/09/2023",
+      "waterings": [
+        "11/10/2026"
+      ]
+    },
+    {
+      "name": "Calathea",
+      "type": "Foliage",
+      "location": "Balcony",
+      "interval_days": 5,
+      "acquired": "01/04/2021",
+      "waterings": [
+        "09/11/2026",
+        "14/11/2026",
+        "18/11/2026"
+      ]
+    },
+    {
+      "name": "String of Pearls",
+      "type": "Succulent",
+      "location": "Office",
+      "interval_days": 14,
+      "acquired": "24/02/2021",
+      "waterings": [
+        "15/11/2026"
+      ]
+    },
+    {
+      "name": "Haworthia",
+      "type": "Succulent",
+      "location": "Living room",
+      "interval_days": 18,
+      "acquired": "20/05/2026",
+      "waterings": [
+        "06/08/2026",
+        "24/08/2026",
+        "10/09/2026",
+        "30/09/2026",
+        "18/10/2026"
+      ]
+    },
+    {
+      "name": "Echeveria",
+      "type": "Succulent",
+      "location": "Conservatory",
+      "interval_days": 16,
+      "acquired": "07/02/2021",
+      "waterings": [
+        "05/09/2026",
+        "21/09/2026",
+        "09/10/2026",
+        "24/10/2026",
+        "09/11/2026"
+      ]
+    },
+    {
+      "name": "African Violet",
+      "type": "Flowering",
+      "location": "Bathroom",
+      "interval_days": 6,
+      "acquired": "30/01/2023",
+      "waterings": [
+        "28/10/2026",
+        "05/11/2026",
+        "10/11/2026",
+        "16/11/2026"
+      ]
+    },
+    {
+      "name": "Begonia",
+      "type": "Flowering",
+      "location": "Kitchen",
+      "interval_days": 5,
+      "acquired": "26/02/2021",
+      "waterings": [
+        "13/11/2026",
+        "20/11/2026"
+      ]
+    },
+    {
+      "name": "Anthurium",
+      "type": "Flowering",
+      "location": "Bedroom",
+      "interval_days": 7,
+      "acquired": "23/12/2025",
+      "waterings": [
+        "19/11/2026"
+      ]
+    },
+    {
+      "name": "Philodendron",
+      "type": "Vine",
+      "location": "Hallway",
+      "interval_days": 7,
+      "acquired": "26/01/2025",
+      "waterings": [
+        "10/10/2026",
+        "19/10/2026",
+        "25/10/2026",
+        "31/10/2026",
+        "07/11/2026"
+      ]
+    },
+    {
+      "name": "English Ivy",
+      "type": "Vine",
+      "location": "Bedroom",
+      "interval_days": 6,
+      "acquired": "08/04/2024",
+      "waterings": []
+    },
+    {
+      "name": "Chinese Evergreen",
+      "type": "Foliage",
+      "location": "Living room",
+      "interval_days": 10,
+      "acquired": "18/03/2025",
+      "waterings": [
+        "24/10/2026",
+        "02/11/2026",
+        "12/11/2026"
+      ]
+    },
+    {
+      "name": "Dracaena",
+      "type": "Foliage",
+      "location": "Kitchen",
+      "interval_days": 12,
+      "acquired": "10/12/2025",
+      "waterings": [
+        "24/10/2026",
+        "06/11/2026"
+      ]
+    },
+    {
+      "name": "Yucca",
+      "type": "Tree",
+      "location": "Landing",
+      "interval_days": 14,
+      "acquired": "30/01/2026",
+      "waterings": []
+    },
+    {
+      "name": "Money Tree",
+      "type": "Tree",
+      "location": "Bedroom",
+      "interval_days": 9,
+      "acquired": "27/01/2023",
+      "waterings": []
+    },
+    {
+      "name": "Olive Tree",
+      "type": "Tree",
+      "location": "Balcony",
+      "interval_days": 10,
+      "acquired": "19/10/2023",
+      "waterings": []
+    },
+    {
+      "name": "Lemon Tree",
+      "type": "Tree",
+      "location": "Bathroom",
+      "interval_days": 4,
+      "acquired": "02/07/2022",
+      "waterings": [
+        "08/11/2026",
+        "12/11/2026",
+        "18/11/2026"
+      ]
+    },
+    {
+      "name": "Tomato",
+      "type": "Vegetable",
+      "location": "Kitchen",
+      "interval_days": 2,
+      "acquired": "14/08/2023",
+      "waterings": [
+        "10/11/2026",
+        "12/11/2026",
+        "14/11/2026",
+        "16/11/2026"
+      ]
+    },
+    {
+      "name": "Chilli Pepper",
+      "type": "Vegetable",
+      "location": "Bathroom",
+      "interval_days": 3,
+      "acquired": "01/12/2021",
+      "waterings": []
+    },
+    {
+      "name": "Strawberry",
+      "type": "Fruit",
+      "location": "Conservatory",
+      "interval_days": 3,
+      "acquired": "24/11/2023",
+      "waterings": [
+        "15/11/2026",
+        "17/11/2026",
+        "20/11/2026"
+      ]
+    },
+    {
+      "name": "Coriander",
+      "type": "Herb",
+      "location": "Landing",
+      "interval_days": 3,
+      "acquired": "01/05/2025",
+      "waterings": [
+        "31/10/2026",
+        "05/11/2026",
+        "07/11/2026",
+        "12/11/2026",
+        "17/11/2026"
+      ]
+    },
+    {
+      "name": "Sage",
+      "type": "Herb",
+      "location": "Landing",
+      "interval_days": 6,
+      "acquired": "31/10/2022",
+      "waterings": [
+        "27/10/2026",
+        "02/11/2026",
+        "08/11/2026"
+      ]
+    },
+    {
+      "name": "Oregano",
+      "type": "Herb",
+      "location": "Hallway",
+      "interval_days": 5,
+      "acquired": "15/12/2020",
+      "waterings": [
+        "28/10/2026",
+        "02/11/2026",
+        "07/11/2026",
+        "14/11/2026",
+        "18/11/2026"
+      ]
+    },
+    {
+      "name": "Venus Flytrap",
+      "type": "Carnivorous",
+      "location": "Office",
+      "interval_days": 4,
+      "acquired": "14/11/2024",
+      "waterings": [
+        "19/11/2026"
+      ]
+    },
+    {
+      "name": "Air Plant",
+      "type": "Bromeliad",
+      "location": "Living room",
+      "interval_days": 8,
+      "acquired": "15/03/2023",
+      "waterings": [
+        "19/11/2026"
+      ]
+    },
+    {
+      "name": "Bird of Paradise",
+      "type": "Flowering",
+      "location": "Hallway",
+      "interval_days": 7,
+      "acquired": "10/06/2021",
+      "waterings": [
+        "30/10/2026",
+        "05/11/2026",
+        "12/11/2026"
+      ]
+    },
+    {
+      "name": "Hoya",
+      "type": "Vine",
+      "location": "Kitchen",
+      "interval_days": 12,
+      "acquired": "14/05/2026",
+      "waterings": [
+        "07/10/2026",
+        "19/10/2026",
+        "02/11/2026",
+        "14/11/2026"
+      ]
+    },
+    {
+      "name": "Prayer Plant",
+      "type": "Foliage",
+      "location": "Bathroom",
+      "interval_days": 5,
+      "acquired": "01/10/2026",
+      "waterings": [
+        "13/11/2026"
+      ]
+    },
+    {
+      "name": "Kentia Palm",
+      "type": "Palm",
+      "location": "Kitchen",
+      "interval_days": 8,
+      "acquired": "15/06/2022",
+      "waterings": [
+        "17/10/2026",
+        "26/10/2026",
+        "05/11/2026",
+        "12/11/2026",
+        "20/11/2026"
+      ]
+    },
+    {
+      "name": "Areca Palm",
+      "type": "Palm",
+      "location": "Conservatory",
+      "interval_days": 6,
+      "acquired": "15/02/2026",
+      "waterings": []
+    },
+    {
+      "name": "Christmas Cactus",
+      "type": "Succulent",
+      "location": "Office",
+      "interval_days": 12,
+      "acquired": "08/12/2022",
+      "waterings": [
+        "12/10/2026",
+        "23/10/2026",
+        "04/11/2026",
+        "17/11/2026"
+      ]
+    }
+  ]
+}
