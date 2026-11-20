@@ -62,10 +62,9 @@ class ValidationError(Exception):
     'message' describes the problem.
     """
     
-    def __init__(self, field_name: str, message: str):
-        super().__init__(message)
-        self.field = field_name
-        self.message = message
+    def __init__(self, errors: list[str]):
+        super().__init__(f"{len(errors)} problem(s) found")
+        self.errors = errors
         
 class PlantNotFound(Exception):
     """An ID was given that no plant has. Raised by get_plant_by_id()"""
@@ -76,9 +75,9 @@ class ImportFailed(Exception):
     'errors' holds one line for each problem found
     """
     
-    def __init__(slef, errors: list[str]):
+    def __init__(self, errors: list[str]):
         super().__init__(f"{len(errors)} problem(s) found")
-        slef.error = errors
+        self.errors = errors
         
         
 #************************************************************
@@ -551,7 +550,7 @@ def _insert_plant(conn: sqlite3.Connection, plant: Plant) -> int:
          plant.plant_type,
          plant.location,
          plant.interval_days,
-         plant.acquired.isoformat)
+         plant.acquired.isoformat())
     )
     plant_id = cursor.lastrowid
     for when in plant.waterings:
@@ -609,7 +608,7 @@ def update_plant(conn: sqlite3.Connection, plant: Plant) -> None:
     _require_plant(conn, plant.id)
     conn.execute(
         "UPDATE plants SET name = ?, plant_type = ?, location = ?, interval_days = ?,"
-        " acquired = ? WHERE id = ?"
+        " acquired = ? WHERE id = ?",
         (plant.name, plant.plant_type, plant.location, plant.interval_days, plant.acquired.isoformat(), plant.id),
     )
     conn.commit()
@@ -638,7 +637,7 @@ def add_watering(conn: sqlite3.Connection, plant_id: int, when: date) -> bool:
 
 # Describes how each JSON value type is in a import error
 
-JSON_TYPE_NAMES = {str: "text in quotes", int: "A whole number", list: "A list"}
+JSON_TYPE_NAMES = {str: "text in quotes", int: "a whole number", list: "a list"}
 
 def _read_key(record: dict, key: str, kind: type, parse, problems: list[str]):
     """
@@ -675,10 +674,10 @@ def _plant_from_record(record, today: date) -> tuple[Plant | None, list[str]]:
     plant_type = _read_key(record, "type", str, parse_type, problems)
     location = _read_key(record, "location", str, parse_location, problems)
     interval = _read_key(record, "interval_days", int, lambda number: parse_interval_days(str(number)), problems)
-    acquired = _read_key(record, "aquired", str, parse_date, problems)
+    acquired = _read_key(record, "acquired", str, parse_date, problems)
     if acquired is not None:
         if acquired > today:
-            problems.append("aquired: cannot be in the future.")
+            problems.append("acquired: cannot be in the future.")
         elif age_of(acquired, today)[0] > MAX_AGE_YEARS:
             problems.append(f"acquired: cannot be more than {MAX_AGE_YEARS} years ago.")
     
@@ -700,7 +699,7 @@ def _plant_from_record(record, today: date) -> tuple[Plant | None, list[str]]:
         return None, problems
     return Plant(None, name, plant_type, location, interval, acquired, sorted(waterings)), []
 
-def read_import_files(path, today: date) -> list[Plant]:
+def read_import_file(path, today: date) -> list[Plant]:
     """
     Reads and checks a JSON import file
     
@@ -727,12 +726,12 @@ def read_import_files(path, today: date) -> list[Plant]:
     errors: list[str] = []
     for number, record in enumerate(data["plants"], start=1):
         plant, problems = _plant_from_record(record, today)
-        error.extend(f"Plant {number}, {problem}" for problem in problems)
+        errors.extend(f"Plant {number}, {problem}" for problem in problems)
         if plant is not None:
             plants.append(plant)
-        if errors:
-            raise ImportFailed(errors)
-        return plants
+    if errors:
+        raise ImportFailed(errors)
+    return plants
 
 def import_plants(conn: sqlite3.Connection, plants: list[Plant]) -> int:
     """
@@ -743,7 +742,7 @@ def import_plants(conn: sqlite3.Connection, plants: list[Plant]) -> int:
     """
     with conn:
         for plant in plants:
-            _insert_plant(conn, plants)
+            _insert_plant(conn, plant)
     return len(plants)
 
 def export_plants(conn: sqlite3.Connection, path) -> int:
@@ -756,7 +755,7 @@ def export_plants(conn: sqlite3.Connection, path) -> int:
             {
                 "name": plant.name,
                 "type": plant.plant_type,
-                "loction": plant.location,
+                "location": plant.location,
                 "interval_days": plant.interval_days,
                 "acquired": format_date(plant.acquired),
                 "waterings": [format_date(when) for when in sorted(plant.waterings)],
@@ -766,7 +765,7 @@ def export_plants(conn: sqlite3.Connection, path) -> int:
     }
     try:
         with open(path, "w", encoding="utf-8") as file:
-            json.dump(date, file, indent=2, ensure_ascii=False)
+            json.dump(data, file, indent=2, ensure_ascii=False)
             file.write("\n")
     except OSError as error:
         raise ValidationError("path", f"That file could not be written ({error.strerror}).") from None

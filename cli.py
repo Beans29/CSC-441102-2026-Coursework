@@ -38,7 +38,7 @@ def colour(text: str, state: core.WaterState) -> str:
 def print_table(plants: list[core.Plant], today: date) -> None:
     """Print the plants in table format"""
     heading = (f"{'ID':<4}  {'Name':<20}  {'Age':<9}  {'Type':<12}  "
-               f"{'Location':<12}  {'Next Water'}")    
+               f"{'Location':<{core.MAX_LOCATION}}  {'Next Water'}")
     print()
     print(heading)
     print("-" * len(heading))
@@ -47,8 +47,8 @@ def print_table(plants: list[core.Plant], today: date) -> None:
     for plant in plants:
         age = core.format_age(*core.age_of(plant.acquired, today)) 
         row = (f"{core.format_id(plant.id):<4}  {plant.name:<20}  {age:<9}  "
-              f"{plant.plant_type:<12}  {plant.location:<12}  "
-              f"{core.format_next_water(plant, today)}")
+               f"{plant.plant_type:<12}  {plant.location:<{core.MAX_LOCATION}}  "
+               f"{core.format_next_water(plant, today)}")
         print(colour(row, core.water_state(plant, today)))
     print("-" * len(heading))
     print(core.status_line(plants, today))
@@ -91,11 +91,11 @@ def draw_table_screen(plants: list[core.Plant], shown: list[core.Plant], view: V
             print("Nothing needs attention today.")
         else:
             print("No plants match")
-        filter_line = describe_filter(view, len(shown), len(plants))
-        if filter_line:
-            print(filter_line)
-        print(f"{core.status_line(plants, today)}   |   {describe_order(view)}")
-        print()
+    filter_line = describe_filter(view, len(shown), len(plants))
+    if filter_line:
+        print(filter_line)
+    print(f"{core.status_line(plants, today)}   |   {describe_order(view)}")
+    print()
 
 def parse_command(line: str) -> tuple[str, str]:
     """Split what the user typed into a command word and the rest. 
@@ -311,7 +311,7 @@ def print_locations(summeries: list[core.LocationSummary]) -> None:
     Prints one row per location: how many plants, how many are due, and overdue
     """
     width = core.MAX_LOCATION
-    heading = f"{'Location':<{width}} {'Plants':>6} {'Due today':>9} {'Overdue':>7}"
+    heading = f"{'Location':<{width}}  {'Plants':>6}  {'Due today':>9}  {'Overdue':>7}"
     print()
     print(heading)
     print("-" * len(heading))
@@ -320,7 +320,7 @@ def print_locations(summeries: list[core.LocationSummary]) -> None:
     for row in summeries:
         print(f"{row.location:<{width}}  {row.plants:>6}  {row.due_today:>9}  {row.overdue:>7}")
     print("-" * len(heading))
-    total = [sum(getattr(row, name) for row in summeries) for name in ("plants", "due_today", )]
+    total = [sum(getattr(row, name) for row in summeries) for name in ("plants", "due_today", "overdue")]
     print(f"{'Total':<{width}}  {total[0]:>6}  {total[1]:>9}  {total[2]:>7}")
 
 def clean_path(text: str) -> str:
@@ -341,10 +341,10 @@ def import_command(conn, rest: str) -> None:
         plants = core.read_import_file(path, date.today())
     except core.ImportFailed as failure:
         print(f"Nothing was imported. {core.plural(len(failure.errors), 'problem')} found in {path}:")
-        for problem in failure:
+        for problem in failure.errors:
             print(f"    ! {problem}")
         return
-    if confirm(f"{core.plural(len(plants), 'plant')} found in {path}. Type yes to import"):
+    if confirm(f"{core.plural(len(plants), 'plant')} found in {path}. Type yes to import: "):
         count = core.import_plants(conn, plants)
         print(f"Imported {core.plural(count, 'plant')}.")
     else:
@@ -398,7 +398,8 @@ def main() -> None:
         )
         draw_table_screen(plants, shown, view, today)
         print("<ID> open | add | water <ID> [date] | sort <column> [desc] | find <text>")
-        word, rest = parse_command(input("location <name> | locations | today | all | quit > "))
+        print("location <name> | locations | today | all | import <file> | export <file>")
+        word, rest = parse_command(input("quit > "))
         try:
             if word.isdigit():
                 message = details_screen(conn, core.parse_plant_id(word))
@@ -419,7 +420,7 @@ def main() -> None:
             elif word == 'import':
                 import_command(conn, rest)
             elif word == "export":
-                export_command(cpnn, rest)
+                export_command(conn, rest)
             elif word == "today":
                 view.today_only = True
             elif word == "all":
