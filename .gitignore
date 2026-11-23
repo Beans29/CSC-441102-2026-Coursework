@@ -1,3 +1,15 @@
+plants.db
+plants.db-journal
 
-*.db
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# uv / virtual environment
+.venv/
+
+# macOS and editor files
 .DS_Store
+.vscode/
+.idea/

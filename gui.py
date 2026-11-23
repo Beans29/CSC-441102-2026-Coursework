@@ -20,11 +20,91 @@ COLUMNS = (
 
 ALL_LOCATIONS = "All locations"
 
+FROM_FIELDS = (
+    ("name", "Name", core.parse_name),
+    ("plant_type", "Type", core.parse_type),
+    ("location", "Location", core.parse_location),
+    ("interval_days", "water every (days)", core.parse_interval_days),
+    ("age_years", "Age: years", core.parse_age_years),
+    ("age_months", "Age: months (0 to 11)", core.parse_age_months),
+)
+ERROR_RED = "red"
+
 # Text colour of a row for each colour name in nore.STATE_COLOUR
 ROW_COLOURS = {"red": "red",
                "amber": "#b36b00",
                "blue": "blue"}
 
+def run_modal(window: tk.Toplevel, parent) -> None:
+    """
+    Shows a window on top of its parent window and waits here until its closed.
+    
+    while its open the cannot click elsewere in the app
+    """
+    
+    window.transient(parent)    #Keeps it infront of parent
+    window.wait_visibility()    #Window must be on the screen before it can take the grab
+    window.grab_set()           #Send all clicks and keys to this window
+    parent.wait_window(window)  #Pasue here utll the window closes
+    
+class PlantForm(tk.Toplevel):
+    """
+    A form with a box for each field and an error line under each box.
+    
+    The form only checks what was typed, if everything is valid, 'result' holds
+    the cleaned values, otherwise it stays None. the caller decides what to do 
+    with them, so the same form can add or edit.
+    """
+    
+    def __init__(self, parent, title: str, values: dict | None = None):
+        super().__init__(parent)
+        self.title(title)
+        self.resizable(False, False)
+        self.result = None
+        values = values or {}
+        
+        self.vars = {}      # field name -> the text in its box
+        self.errors = {}    # field name -> the error line under its box
+        self.boxes = {}     # field name -> the box itself
+        for row, (field_name, label, parser) in enumerate(FROM_FIELDS):
+            self.vars[field_name] = tk.StringVar(value=str(values.get(field_name, "")))
+            self.errors[field_name] = tk.StringVar()
+            tk.Label(self, text=label).grid(row=row * 2, column=0, sticky="w", padx=8, pady=(8 ,0))
+            box = tk.Entry(self, textvariable=self.vars[field_name], width=24)
+            box.grid(row= row * 2, column=1, padx=8, pady=(8, 0))
+            self.boxes [field_name] = box
+            tk.Label(self, textvariable=self.errors[field_name], fg=ERROR_RED).grid(
+                row=row * 2 + 1, column= 1, sticky= "w", padx=8
+            )
+            
+        buttons = tk.Frame(self)
+        buttons.grid( row = len (FROM_FIELDS) * 2, column= 0, columnspan= 2, pady=8)
+        ttk.Button( buttons, text="Save", command=self.on_save).pack( side="left", padx=4)
+        ttk.Button( buttons, text="Cancel", command=self.destroy).pack(side="left", padx=4)
+        self.bind("<Return>", lambda event: self.on_save())
+        self.bind("<Escape>", lambda event: self.destroy())
+        self.boxes[FROM_FIELDS[0][0]].focus_set()
+        
+    def on_save(self) -> None:
+        """
+        Checks every box and shows a message under each one
+        """
+        clean = {}
+        first_bad = None
+        for field_name, label, parser in FROM_FIELDS:
+            try:
+                clean[field_name] = parser( self.vars [field_name].get())
+                self.errors[ field_name].set("")
+            except core.ValidationError as error:
+                self.errors[field_name].set(error.message)
+                if first_bad is None:
+                    first_bad = field_name
+        if first_bad is not None:
+            self.boxes[first_bad].focus_set()
+            return
+        self.result = clean
+        self.destroy()
+        
 class PlantApp(tk.Tk):
     """
     The main window: Plant table, Status line and refresh button
@@ -68,10 +148,8 @@ class PlantApp(tk.Tk):
         
         ttk.Button(bar, text="Today", command=self.on_today).pack(side="left", padx=(0, 4))
         ttk.Button(bar, text="All", command=self.on_all).pack(side="left")
+        ttk.Button(bar, text="Add Plant", command=self.on_add).pack(side="right")
         
-    
-        
-
     def build_table(self) -> None:
         """
         Creates the table that lists all the plants, with the addtion of a scroll bar for eaier navigation =
@@ -123,6 +201,37 @@ class PlantApp(tk.Tk):
             self.refresh(note="Today view is ranked by urgency")
         else:
             self.refresh()
+    
+    def on_add(self) -> None:
+        """
+        Adds plant button, Shows the form, then saves the plant if the form was filled in
+        """
+        form = PlantForm(self, "Add plant", values={"age_years": "0", "age_months": "0"})
+        run_modal(form, self)
+        if form.result is None:
+            return
+        new = form.result
+        acquired = core.acquired_from_age(new["age_years"], new["age_months"], date.today())
+        plant = core.add_plant(
+            
+            self.conn, new["name"],
+            new["plant_type"],
+            new["location"],
+            new["interval_days"],
+            acquired
+        )
+        
+        self.refresh(note=f"Added {plant.name}.")
+        self.select_plant(plant.id)
+        
+    def select_plant(self, plant_id: int) -> None:
+        """
+        highlughts a plant's row and scroll to it, if the current view shows it
+        """
+        row = str (plant_id)
+        if self.tree.exists(row):
+            self.tree.selection_set(row)
+            self.tree.see(row)
         
     def on_today(self) -> None:
         """
@@ -205,7 +314,7 @@ class PlantApp(tk.Tk):
         """
         if self.today_only:
             return "ranked by urgency"
-        return f"sorted by: {self.sort_column} {' (desc) ' if self.descending else ''}"
+        return f"sorted by: {self.sort_column}{' (desc)' if self.descending else ''}"
     
     def describe_view(self, shown: int, total: int, search: str, location: str) -> str:
         """
@@ -223,7 +332,7 @@ class PlantApp(tk.Tk):
         if shown == 0:
             if self.today_only and not (search or location):
                 return "Nothing needs attention today."
-            return f"No plant match ({','.join(reasons)}). Click all to clear."
+            return f"No plant match ({', '.join(reasons)}). Click all to clear."
         if reasons:
             return f"Showing {shown} of {core.plural(total, 'plant')} ({', '.join(reasons)}). Click All to clear."
         return ""
