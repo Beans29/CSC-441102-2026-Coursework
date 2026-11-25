@@ -46,6 +46,9 @@ def run_modal(window: tk.Toplevel, parent) -> None:
     window.wait_visibility()    #Window must be on the screen before it can take the grab
     window.grab_set()           #Send all clicks and keys to this window
     parent.wait_window(window)  #Pasue here utll the window closes
+    if isinstance(parent, tk.Toplevel) and parent.winfo_exists():
+        parent.grab_set()       #A window opened from another window
+    
     
 class PlantForm(tk.Toplevel):
     """
@@ -150,6 +153,7 @@ class DetailsWindow(tk.Toplevel):
         
             buttons = tk.Frame(self)
             buttons. pack(pady= 8)
+            ttk.Button(buttons, text="Edit", command=self.on_edit).pack(side="left", padx=4)
             ttk.Button(buttons, text="Remove", command=self.on_remove).pack(side="left", padx=4)
             ttk.Button(buttons, text="Close", command=self.destroy).pack(side="left", padx=4)
             self.bind("<Escape>", lambda event: self.destroy())
@@ -200,6 +204,31 @@ class DetailsWindow(tk.Toplevel):
             self.refresh()
             self.on_change()
         
+        def on_edit(self) -> None:
+            """
+            Edit button: shows the form with the plants values, then saves what was changed
+            """
+            today = date.today()
+            plant = core.get_plant(self.conn, self.plant_id)
+            orginal = core.plant_to_fields(plant, today)
+            form = PlantForm(self, f"Edit plant {core.format_id(plant.id)}", values=orginal)
+            run_modal(form, self)
+            if form.result is None:     # Cancelled or window was closed
+                return
+            if form.result == orginal:
+                self.error.set("")
+                self.feedback.set("No changes were made.")
+                return
+            try:
+                core.update_plant(self.conn, core.make_plant(form.result, today, original=plant))
+            except core.PlantNotFound as error:
+                messagebox.showerror("Plant Care", str(error), parent=self)
+                self.destroy()
+                return
+            self.error.set("")
+            self.feedback.set(f"Saved cahnges to {core.format_id(plant.id)} {form.result['name']}.")
+            self.refresh()
+            self.on_change()
         
         def on_remove(self) -> None:
             """
