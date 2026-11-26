@@ -3,9 +3,10 @@ File Name: gui.py
 Author: X9J77
 
 """
+import os
 import tkinter as tk
 from datetime import date
-from tkinter import ttk, messagebox
+from tkinter import ttk, messagebox, filedialog
 
 import core
 
@@ -29,6 +30,9 @@ FROM_FIELDS = (
     ("age_months", "Age: months (0 to 11)", core.parse_age_months),
 )
 ERROR_RED = "red"
+
+JSON_FILES = [("JSON files", "*.json"), ("All files", "*.*")]   #File types offered in the Import and Export
+MAX_ERRORS_SHOWN = 12                                           #Import error box lists this many problems, then says how many more
 
 # Text colour of a row for each colour name in nore.STATE_COLOUR
 ROW_COLOURS = {"red": "red",
@@ -109,141 +113,172 @@ class PlantForm(tk.Toplevel):
         self.destroy()
         
 class DetailsWindow(tk.Toplevel):
+    """
+    Shows one plants details, watering history, and buttons to water or remove it
+        
+    The windo reloads the plant from the database after every change, so what is showed is 
+    always saved. on_change is called after a watering so the table behind can redraw. If the plant
+    is removed, 'message' holds a line for the main window
+    """
+    def __init__(self, parent, conn, plant_id: int, on_change):
+        super().__init__(parent)
+        self.conn = conn
+        self.plant_id = plant_id
+        self.on_change = on_change
+        self.message = ""
+        self.resizable(False, False)
+        
+        self.heading = tk.StringVar()
+        tk.Label(self, textvariable=self.heading).pack(anchor="w", padx=8, pady=(8, 4))
+        
+        self.rows_frame = tk.Frame(self)
+        self.rows_frame.pack(fill="x", padx=8)
+        
+        self.history_title = tk.StringVar()
+        tk.Label(self, textvariable=self.history_title).pack(anchor="w", padx=8, pady=(8, 0))
+        history_frame = tk.Frame(self)
+        history_frame.pack(anchor="w", padx=8)
+        self.history_list = tk.Listbox(history_frame, height=8, width=30)
+        scroll = ttk.Scrollbar(history_frame, orient="vertical", command=self.history_list.yview)
+        self.history_list.configure(yscrollcommand=scroll.set)
+        self.history_list.pack(side="left", fill="x", expand=True)
+        scroll.pack(side="right", fill="y")
+        
+        water = tk.Frame(self)
+        water.pack(fill="x", padx=8, pady=(8, 0))
+        tk.Label(water, text="Date (empty = today):").pack(side="left")
+        self.date_var = tk.StringVar()
+        tk.Entry(water, textvariable=self.date_var, width=12).pack(side="left", padx=8)
+        ttk.Button(water, text="water", command=self.on_water).pack(side="left")
+        self.error = tk.StringVar()
+        self.feedback = tk.StringVar()
+        tk.Label(self, textvariable=self.error, fg=ERROR_RED).pack(anchor="w", padx=8)
+        tk.Label(self, textvariable=self.feedback).pack(anchor="w", padx=8)
+        
+        buttons = tk.Frame(self)
+        buttons. pack(pady= 8)
+        ttk.Button(buttons, text="Edit", command=self.on_edit).pack(side="left", padx=4)
+        ttk.Button(buttons, text="Remove", command=self.on_remove).pack(side="left", padx=4)
+        ttk.Button(buttons, text="Close", command=self.destroy).pack(side="left", padx=4)
+        self.bind("<Escape>", lambda event: self.destroy())
+        
+        self.refresh()
+        
+    def refresh(self) -> None:
         """
-        Shows one plants details, watering history, and buttons to water or remove it
-        
-        The windo reloads the plant from the database after every change, so what is showed is 
-        always saved. on_change is called after a watering so the table behind can redraw. If the plant
-        is removed, 'message' holds a line for the main window
+        Relaods the plants and redraws the details and history
         """
-        def __init__(self, parent, conn, plant_id: int, on_change):
-            super().__init__(parent)
-            self.conn = conn
-            self.plant_id = plant_id
-            self.on_change = on_change
-            self.message = ""
-            self.resizable(False, False)
-        
-            self.heading = tk.StringVar()
-            tk.Label(self, textvariable=self.heading).pack(anchor="w", padx=8, pady=(8, 4))
-        
-            self.rows_frame = tk.Frame(self)
-            self.rows_frame.pack(fill="x", padx=8)
-        
-            self.history_title = tk.StringVar()
-            tk.Label(self, textvariable=self.history_title).pack(anchor="w", padx=8, pady=(8, 0))
-            history_frame = tk.Frame(self)
-            history_frame.pack(anchor="w", padx=8)
-            self.history_list = tk.Listbox(history_frame, height=8, width=30)
-            scroll = ttk.Scrollbar(history_frame, orient="vertical", command=self.history_list.yview)
-            self.history_list.configure(yscrollcommand=scroll.set)
-            self.history_list.pack(side="left", fill="x", expand=True)
-            scroll.pack(side="right", fill="y")
-        
-            water = tk.Frame(self)
-            water.pack(fill="x", padx=8, pady=(8, 0))
-            tk.Label(water, text="Date (empty = today):").pack(side="left")
-            self.date_var = tk.StringVar()
-            tk.Entry(water, textvariable=self.date_var, width=12).pack(side="left", padx=8)
-            ttk.Button(water, text="water", command=self.on_water).pack(side="left")
-            self.error = tk.StringVar()
-            self.feedback = tk.StringVar()
-            tk.Label(self, textvariable=self.error, fg=ERROR_RED).pack(anchor="w", padx=8)
-            tk.Label(self, textvariable=self.feedback).pack(anchor="w", padx=8)
-        
-            buttons = tk.Frame(self)
-            buttons. pack(pady= 8)
-            ttk.Button(buttons, text="Edit", command=self.on_edit).pack(side="left", padx=4)
-            ttk.Button(buttons, text="Remove", command=self.on_remove).pack(side="left", padx=4)
-            ttk.Button(buttons, text="Close", command=self.destroy).pack(side="left", padx=4)
-            self.bind("<Escape>", lambda event: self.destroy())
-        
-            self.refresh()
-        
-        def refresh(self) -> None:
-            """
-            Relaods the plants and redraws the details and history
-            """
-            plant = core.get_plant(self.conn, self.plant_id)
-            history = core.get_history(self.conn, self.plant_id)
-            self.title(f"Plant {core.format_id(plant.id)}")
-            self.heading.set(f"{core.format_id(plant.id)} - {plant.name}")
+        plant = core.get_plant(self.conn, self.plant_id)
+        history = core.get_history(self.conn, self.plant_id)
+        self.title(f"Plant {core.format_id(plant.id)}")
+        self.heading.set(f"{core.format_id(plant.id)} - {plant.name}")
             
-            for widget in self.rows_frame.winfo_children():
-                widget.destroy()
-            for row, (lable, value) in enumerate(core.details_rows(plant, date.today())):
-                tk.Label(self.rows_frame, text=lable + ":").grid(row=row, column=0, sticky="w")
-                tk.Label(self.rows_frame, text=value).grid(row=row, column=1, sticky="w", padx=(12, 0))
+        for widget in self.rows_frame.winfo_children():
+            widget.destroy()
+        for row, (lable, value) in enumerate(core.details_rows(plant, date.today())):
+            tk.Label(self.rows_frame, text=lable + ":").grid(row=row, column=0, sticky="w")
+            tk.Label(self.rows_frame, text=value).grid(row=row, column=1, sticky="w", padx=(12, 0))
                 
-            self.history_title.set(f"History ({core.plural(len(history), 'waterings')})")
-            self.history_list.delete(0, "end")
-            for when in history:
-                self.history_list.insert("end", core.format_date(when))
+        self.history_title.set(f"History ({core.plural(len(history), 'waterings')})")
+        self.history_list.delete(0, "end")
+        for when in history:
+            self.history_list.insert("end", core.format_date(when))
         
-        def on_water(self) -> None:
-            """
-            Water button: Records a watering, the date typed, defaults to today if field is empty
-            """
-            today = date.today()
-            text = self.date_var.get()
+    def on_water(self) -> None:
+        """
+        Water button: Records a watering, the date typed, defaults to today if field is empty
+        """
+        today = date.today()
+        text = self.date_var.get()
             
-            try:
-                when = core.parse_watering_date(text, today) if text.strip() else today
-            except core.ValidationError as error:
-                self.error.set(error.message)
-                self.feedback.set("")
-                return
-            plant = core.get_plant(self.conn, self.plant_id)
-            if core.add_watering(self.conn, self.plant_id, when):
-                self.feedback.set(f"Watered {core.format_id(plant.id)} {plant.name} on {core.format_date(when)}.")
-            else:
-                self.feedback.set(f"Already recored for {core.format_date(when)}. Nothing was changed")
+        try:
+            when = core.parse_watering_date(text, today) if text.strip() else today
+        except core.ValidationError as error:
+            self.error.set(error.message)
+            self.feedback.set("")
+            return
+        plant = core.get_plant(self.conn, self.plant_id)
+        if core.add_watering(self.conn, self.plant_id, when):
+            self.feedback.set(f"Watered {core.format_id(plant.id)} {plant.name} on {core.format_date(when)}.")
+        else:
+            self.feedback.set(f"Already recored for {core.format_date(when)}. Nothing was changed")
                 
-            self.error.set("")
-            self.date_var.set("")
-            self.refresh()
-            self.on_change()
+        self.error.set("")
+        self.date_var.set("")
+        self.refresh()
+        self.on_change()
         
-        def on_edit(self) -> None:
-            """
-            Edit button: shows the form with the plants values, then saves what was changed
-            """
-            today = date.today()
-            plant = core.get_plant(self.conn, self.plant_id)
-            orginal = core.plant_to_fields(plant, today)
-            form = PlantForm(self, f"Edit plant {core.format_id(plant.id)}", values=orginal)
-            run_modal(form, self)
-            if form.result is None:     # Cancelled or window was closed
-                return
-            if form.result == orginal:
-                self.error.set("")
-                self.feedback.set("No changes were made.")
-                return
-            try:
-                core.update_plant(self.conn, core.make_plant(form.result, today, original=plant))
-            except core.PlantNotFound as error:
-                messagebox.showerror("Plant Care", str(error), parent=self)
-                self.destroy()
-                return
-            self.error.set("")
-            self.feedback.set(f"Saved cahnges to {core.format_id(plant.id)} {form.result['name']}.")
-            self.refresh()
-            self.on_change()
+    def on_edit(self) -> None:
+        """
+        Edit button: shows the form with the plants values, then saves what was changed
+        """
+        today = date.today()
+        plant = core.get_plant(self.conn, self.plant_id)
+        orginal = core.plant_to_fields(plant, today)
+        form = PlantForm(self, f"Edit plant {core.format_id(plant.id)}", values=orginal)
+        run_modal(form, self)
         
-        def on_remove(self) -> None:
-            """
-            Remove button: deletes the plant and its history after confirmation
-            """
-            plant = core.get_plant(self.conn, self.plant_id)
-            count = len(core.get_history(self.conn, self.plant_id))
-            question = (f"Delete {core.format_id(self.plant_id)} {plant.name} and its "
-                        f"{core.plural(count, 'watering')}? This cannot be undone")
-            if not messagebox.askyesno("Remove plant", question, parent=self):
-                return
-            core.delete_plant(self.conn, self.plant_id)
-            self.message = f"Removed {core.format_id(plant.id)} {plant.name} and its history"
+        if form.result is None:     # Cancelled or window was closed
+            return
+        
+        if form.result == orginal:
+            self.error.set("")
+            self.feedback.set("No changes were made.")
+            return
+        try:
+            core.update_plant(self.conn, core.make_plant(form.result, today, original=plant))
+        except core.PlantNotFound as error:
+            messagebox.showerror("Plant Care", str(error), parent=self)
             self.destroy()
+            return
+        self.error.set("")
+        self.feedback.set(f"Saved cahnges to {core.format_id(plant.id)} {form.result['name']}.")
+        self.refresh()
+        self.on_change()
+        
+    def on_remove(self) -> None:
+        """
+        Remove button: deletes the plant and its history after confirmation
+        """
+        plant = core.get_plant(self.conn, self.plant_id)
+        count = len(core.get_history(self.conn, self.plant_id))
+        question = (f"Delete {core.format_id(self.plant_id)} {plant.name} and its "
+                    f"{core.plural(count, 'watering')}? This cannot be undone")
+        if not messagebox.askyesno("Remove plant", question, parent=self):
+            return
+        core.delete_plant(self.conn, self.plant_id)
+        self.message = f"Removed {core.format_id(plant.id)} {plant.name} and its history"
+        self.destroy()
+        
+class SummaryWindow(tk.Toplevel):
+    """
+    The location sumary: for each location, its plants, how many are due today and overdue
+    """
             
+    def __init__(self, parent, plants: list, today: date):
+        super().__init__(parent)
+        self.title("Locations")
+        self.resizable(False, False)
+                
+        rows = core.location_summary(plants, today)
+        columns = (("location", "Location", 160), ("plants", "Plants", 70), ("due", "Due today", 80), ("overdue", "Overdue", 70))
+        self.tree = ttk.Treeview(self, columns=tuple(c[0] for c in columns), show="headings",
+                                 height=min(max(len(rows) + 1, 3), 15))                
+        for name, heading, width in columns:
+            self.tree.heading(name, text=heading)
+            self.tree.column(name, width=width, anchor="w" if name == "location" else "e")
+                    
+        for row in rows:
+            self.tree.insert("", "end", values=(row.location, row.plants, row.due_today, row.overdue))
+        self.tree.insert("", "end", values=(
+            "Total",
+            sum(row.plants for row in rows),
+            sum(row.due_today for row in rows),
+            sum(row.overdue for row in rows)))
+        self.tree.pack(padx=8, pady=8)
+                
+        ttk.Button(self, text="Close", command=self.destroy).pack(pady=(0, 8))
+        self.bind("<Escape>", lambda event: self.destroy())
         
               
 class PlantApp(tk.Tk):
@@ -321,16 +356,21 @@ class PlantApp(tk.Tk):
     
     def build_bottom_bar(self) -> None:
         """
-        Creates status line and the refresh button under the table
+        Creates the lines under the table (whats hidden, the counts) and the row of buttons
         """
         self.info = tk.StringVar()
         tk.Label(self, textvariable=self.info).pack(fill="x", padx=8, anchor="w")
-        bar = tk.Frame(self)
-        bar.pack(fill= "x", padx= 8, pady= (0, 8))
         self.status = tk.StringVar()
-        tk.Label(bar, textvariable=self.status).pack(side="left")
-        ttk.Button(bar, text= "Refresh", command= self.refresh).pack(side= "right")
-        ttk.Button(bar, text="Open", command=self.on_open_selected).pack(side="right", padx=(0, 4))
+        tk.Label(self, textvariable=self.status).pack(fill="x", padx=8, anchor="w")
+        
+        bar = tk.Frame(self)
+        bar.pack(fill="x", padx=8, pady=8)
+        
+        ttk.Button(bar, text="Open", command=self.on_open_selected).pack(side="left")
+        ttk.Button(bar, text="Locations", command=self.on_locations).pack(side="left", padx=4)
+        ttk.Button(bar, text="Import", command=self.on_import).pack(side="left")
+        ttk.Button(bar, text="Export", command=self.on_export).pack(side="left", padx=4)
+        ttk.Button(bar, text="Refresh", command=self.refresh).pack(side="right")
         
     def on_heading(self, column: str) -> None:
         """
@@ -365,8 +405,50 @@ class PlantApp(tk.Tk):
             acquired
         )
         
-        self.refresh(note=f"Added {plant.name}.")
-        self.select_plant(plant.id)
+    def on_locations(self) -> None:
+        """
+        Locations button: Shows the summary window
+        """
+        window = SummaryWindow(self, core.get_all_plants(self.conn), date.today())
+        run_modal(window, self)
+            
+    def on_import(self) -> None:
+        """
+        Import button: pick a JSON file, check all of it, then add its plants after a yes
+        """
+        path = filedialog.askopenfilename(parent=self, title="Import plants", filetypes=JSON_FILES)
+        if not path:
+            return
+        try:
+            plants = core.read_import_file(path, date.today())
+        except core.ImportFailed as failure:
+            lines = failure.errors[:MAX_ERRORS_SHOWN]
+            if len(failure.errors) > MAX_ERRORS_SHOWN:
+                lines.append(f"... and {len(failure.errors) - MAX_ERRORS_SHOWN} more.")
+            messagebox.showerror("Nothing was imported", "\n".join(lines), parent=self)
+            return
+        question = f"{core.plural(len(plants), 'plant')} found in {os.path.basename(path)}. Import them?"
+        if messagebox.askyesno("Import plants", question, parent=self):
+            count = core.import_plants(self.conn, plants)
+            self.refresh(note=f"Imported {core.plural(count, 'plant')}.")
+        else:
+            self.refresh(note="Nothing was imported.")
+        
+    def on_export(self) -> None:
+        """
+        Export button: picks a file name, then writes every plant and its history to it.
+        """
+        path = filedialog.asksaveasfilename(
+            parent=self, title="Export plants", defaultextension=".json",
+            initialfile="my_plants.json", filetypes=JSON_FILES)
+        if not path:                    # the file window was cancelled
+            return
+        try:
+            count = core.export_plants(self.conn, path)
+        except core.ValidationError as error:
+            messagebox.showerror("Nothing was exported", error.message, parent=self)
+            return
+        self.refresh(note=f"Exported {core.plural(count, 'plant')} to {path}.")
     
     def on_double_click(self, event) -> None:
         """
